@@ -12,6 +12,7 @@ from ag2 import Agent, Context, MemoryStream
 from ag2.events import BaseEvent, HaltEvent, ObserverCompleted, TaskCancelled, TaskStarted, ToolCallEvent
 from ag2.middleware import BaseMiddleware, Middleware
 from ag2.testing import TestConfig
+from ag2.tools.subagents.run_task import _await_invocation
 
 
 class CleanupScope(Middleware):
@@ -173,3 +174,31 @@ async def test_ancestor_cancellation_waits_for_already_halted_leaf(cancel_caller
     assert [name for name, _, _ in terminals] == ["leaf", "middle"]
     assert terminals[0] == ("leaf", "leaf stop", True)
     assert all(was_cleaned for _, _, was_cleaned in terminals)
+
+
+@pytest.mark.asyncio
+async def test_await_invocation_propagates_waiter_cancel_when_ask_finishes() -> None:
+    release = asyncio.Event()
+
+    async def ask_succeeds() -> object:
+        await release.wait()
+        return type("Reply", (), {"body": "ok"})()
+
+    invocation = asyncio.create_task(ask_succeeds())
+
+    class _Origin:
+        halted = True
+
+    class _Forwarder:
+        origin = _Origin()
+
+    async def waiter() -> object:
+        return await _await_invocation(invocation, _Forwarder())
+
+    task = asyncio.create_task(waiter())
+    await asyncio.sleep(0)
+    task.cancel()
+    release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(task, 2)
+    assert invocation.result().body == "ok"
