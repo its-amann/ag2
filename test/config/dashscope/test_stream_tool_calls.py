@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+import json
 from collections.abc import AsyncIterator
 from types import SimpleNamespace
 from typing import Any
@@ -83,3 +84,23 @@ async def test_whole_call_in_one_chunk_without_index() -> None:
     calls = await _run([_chunk([{"id": "a", "function": {"name": "f", "arguments": '{"x": 1}'}}])])
 
     assert calls == [("a", "f", '{"x": 1}')]
+
+
+@pytest.mark.asyncio
+async def test_missing_index_assigns_distinct_slots_across_chunks() -> None:
+    calls = await _run([
+        _chunk([
+            {"id": "call_a", "function": {"name": "alpha", "arguments": '{"a": 1}'}},
+            {"id": "call_b", "function": {"name": "beta", "arguments": '{"b": 2}'}},
+        ]),
+        _chunk([{"id": "call_c", "function": {"name": "gamma", "arguments": '{"c": 3}'}}]),
+    ])
+
+    assert len(calls) == 3
+    assert calls == [
+        ("call_a", "alpha", '{"a": 1}'),
+        ("call_b", "beta", '{"b": 2}'),
+        ("call_c", "gamma", '{"c": 3}'),
+    ]
+    for _, _, arguments in calls:
+        json.loads(arguments)

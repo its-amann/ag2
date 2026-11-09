@@ -219,7 +219,7 @@ class DashScopeClient(LLMClient):
                 for position, tc in enumerate(msg.get("tool_calls") or []):
                     index = tc.get("index")
                     if not isinstance(index, int):
-                        index = len(tool_accs) + position
+                        index = max(tool_accs, default=-1) + 1
                     acc = tool_accs.setdefault(index, {"id": "", "name": "", "arguments": ""})
                     if tc_id := tc.get("id"):
                         acc["id"] = tc_id
